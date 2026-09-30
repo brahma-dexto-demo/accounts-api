@@ -50,17 +50,29 @@ print({"image": image, "account": account})
 
 2. Confirm the synthetic `data/accounts/accounts.json` input is available at
    `s3://brahma-demo-data-<account>/accounts/accounts.json`. If seeding a fresh demo,
-   supply the local JSON contents to a boto3 `s3.put_object` call via `run_script`.
+   use `aws___get_presigned_url` to obtain an S3 **PUT** URL for bucket
+   `brahma-demo-data-<account>`, key `accounts/accounts.json`. Upload the file from
+   the computer (keep the signed URL out of logs):
+
+```sh
+curl --fail --upload-file data/accounts/accounts.json "$PRESIGNED_PUT_URL"
+```
+
+   The bootstrap policy permits writes only to the data bucket's `accounts/*`
+   and the artifacts bucket's `ops-console/*` prefixes.
 3. Render `k8s/deployment.yaml`: replace `ACCOUNTS_API_IMAGE` with the returned
    image and `ACCOUNT_ID` with the STS account. Namespace `demo` must already exist.
    Use the managed Amazon EKS MCP Server `apply_yaml` against cluster `brahma-demo`
    to apply `serviceaccount.yaml`, the rendered deployment, and `service.yaml`.
    Pod Identity for service account `accounts-api` must grant input-bucket read.
-4. Poll `read_k8s_resource` / `manage_k8s_resource` for the Deployment in namespace
+   For every image change, render the deployment again with the new SHA image
+   and re-apply it using `apply_yaml`.
+4. Poll `read_k8s_resource` for the Deployment in namespace
    `demo`. Require `status.observedGeneration >= metadata.generation`,
    `status.updatedReplicas == 2`, and `status.availableReplicas == 2` before
-   considering rollout complete. Inspect pod logs and events through EKS MCP if
-   readiness fails; `/healthz` checks process health, not S3 connectivity.
+   considering rollout complete. Use `list_k8s_resources`, `get_pod_logs`, and
+   `get_k8s_events` if readiness fails; `/healthz` checks process health, not S3
+   connectivity.
 5. Read Service `accounts-api` in namespace `demo`. Obtain
    `status.loadBalancer.ingress[0].hostname` after it is assigned. Service port 80
    forwards to container port 8000. Validate the data path using the live contract:
@@ -70,7 +82,8 @@ uv sync --locked
 BASE_URL=http://<load-balancer-hostname> uv run pytest tests/contract
 ```
 
-Record that URL for `ops-console`'s `ACCOUNTS_API_URL` environment property.
+Record that URL for the CloudFormation `AccountsApiUrl` parameter update in
+`ops-console/DEPLOY.md`; the stack sets `ACCOUNTS_API_URL`.
 
 ## Local run
 

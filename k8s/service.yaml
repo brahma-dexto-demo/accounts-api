@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: accounts-api
   namespace: demo
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-additional-resource-tags: project=brahma-demo
 spec:
   type: LoadBalancer
   selector:
