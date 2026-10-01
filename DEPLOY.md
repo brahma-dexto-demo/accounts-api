@@ -48,18 +48,37 @@ image = f"{account}.dkr.ecr.us-east-1.amazonaws.com/brahma-demo/accounts-api:{sh
 print({"image": image, "account": account})
 ```
 
-2. Confirm the synthetic `data/accounts/accounts.json` input is available at
-   `s3://brahma-demo-data-<account>/accounts/accounts.json`. If seeding a fresh demo,
-   use `aws___get_presigned_url` to obtain an S3 **PUT** URL for bucket
-   `brahma-demo-data-<account>`, key `accounts/accounts.json`. Upload the file from
-   the computer (keep the signed URL out of logs):
+2. Confirm the synthetic input is available at
+   `s3://brahma-demo-data-<account>/accounts/accounts.json`. For a fresh demo,
+   read the complete `data/accounts/accounts.json` on the computer (about 52 KB)
+   and embed its JSON text directly in an `aws___run_script` Python string.
+   Replace the placeholder below with the **entire file contents**, preserving
+   all 200 accounts. The MCP sandbox cannot read the computer's file path.
 
-```sh
-curl --fail --upload-file data/accounts/accounts.json "$PRESIGNED_PUT_URL"
+```python
+import boto3
+import json
+
+session = boto3.Session(region_name="us-east-1")
+account = session.client("sts").get_caller_identity()["Account"]
+bucket = f"brahma-demo-data-{account}"
+key = "accounts/accounts.json"
+seed_json = r'''<paste the entire data/accounts/accounts.json JSON here>'''
+json.loads(seed_json)  # Validate the embedded JSON before writing
+body = seed_json.encode("utf-8")
+s3 = session.client("s3")
+s3.put_object(Bucket=bucket, Key=key, Body=body, ContentType="application/json")
+head = s3.head_object(Bucket=bucket, Key=key)
+assert head["ContentLength"] == len(body), "Seed size mismatch"
+assert head["ContentType"] == "application/json", "Seed content type mismatch"
+print({"bucket": bucket, "key": key, "bytes": head["ContentLength"],
+       "etag": head["ETag"]})
 ```
 
-   The bootstrap policy permits writes only to the data bucket's `accounts/*`
-   and the artifacts bucket's `ops-console/*` prefixes.
+   Run this only through managed MCP. The bootstrap role grants `s3:PutObject`
+   on this data bucket's `accounts/*` prefix under the normal MCP routing rules;
+   CodeBuild's separate service role publishes the console JAR.
+
 3. Render `k8s/deployment.yaml`: replace `ACCOUNTS_API_IMAGE` with the returned
    image and `ACCOUNT_ID` with the STS account. Namespace `demo` must already exist.
    Use the managed Amazon EKS MCP Server `apply_yaml` against cluster `brahma-demo`
