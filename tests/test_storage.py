@@ -25,3 +25,23 @@ def test_s3_selection(monkeypatch):
     )
     store.write("scores/latest.json", {"scores": []})
     assert client.put_object.call_args.kwargs["Key"] == "scores/latest.json"
+
+
+def test_optional_s3_only_masks_missing(monkeypatch):
+    import pytest
+    from botocore.exceptions import ClientError
+
+    monkeypatch.setenv("DATA_BUCKET", "test")
+    client = Mock()
+    monkeypatch.setattr("accounts_api.storage.boto3.client", lambda service: client)
+    store = JsonStore()
+    for code in ["NoSuchKey", "404"]:
+        client.get_object.side_effect = ClientError(
+            {"Error": {"Code": code, "Message": ""}}, "GetObject"
+        )
+        assert store.read_optional("scores/latest.json") is None
+    client.get_object.side_effect = ClientError(
+        {"Error": {"Code": "AccessDenied", "Message": ""}}, "GetObject"
+    )
+    with pytest.raises(ClientError):
+        store.read_optional("scores/latest.json")

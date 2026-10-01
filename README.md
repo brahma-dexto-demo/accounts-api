@@ -30,3 +30,19 @@ BASE_URL=http://localhost:8000 uv run pytest tests/contract
 ```
 
 Contract tests skip when `BASE_URL` is unset. See [DEPLOY.md](DEPLOY.md) for staging.
+
+## Batch risk scores
+
+The API joins accounts by `id` with `scores/latest.json` in the same local data
+folder or S3 bucket. Batch publishes `model_version`, UTC `generated_at`, and
+`scores` entries with `id`, `probability` (0–1) and `risk_score` (integer 0–100,
+rounded half up from probability × 100). This API **does not** infer a score from
+probability: an absent artifact, an unmatched account, or an old entry without
+`risk_score` yields `risk_score: null`. Storage permissions, malformed JSON, and
+other read failures are not treated as missing scores.
+
+Both `GET /accounts` and `GET /accounts/{id}` include `risk_score`. The optional
+`high_risk=true` query on the list selects scores >= 70 before pagination and
+`total` calculation; omitted or `false` returns all accounts. It composes with
+`industry` and `q`. Deploy Batch producer first, then accounts-api, then console;
+old score artifacts show unknown scores until Batch republishes.
