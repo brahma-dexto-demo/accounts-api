@@ -65,6 +65,16 @@
             }
           },
           {
+            "name": "high_risk",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "High Risk"
+            }
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -95,6 +105,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AccountsPage"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Risk scores unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -140,6 +160,16 @@
           },
           "404": {
             "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Risk scores unavailable",
             "content": {
               "application/json": {
                 "schema": {
@@ -205,6 +235,19 @@
             "type": "string",
             "format": "date",
             "title": "Created At"
+          },
+          "risk_score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Score"
           }
         },
         "type": "object",
