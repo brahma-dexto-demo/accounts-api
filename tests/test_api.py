@@ -42,3 +42,76 @@ def test_invalid_pagination(client, query):
 def test_openapi_matches():
     path = Path(__file__).resolve().parents[1] / "openapi.json"
     assert json.loads(path.read_text()) == app.openapi()
+
+
+def test_risk_join_filters_and_boundaries(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATA_BUCKET", raising=False)
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path))
+    source = Path(__file__).resolve().parents[1] / "data/accounts/accounts.json"
+    (tmp_path / "accounts").mkdir()
+    (tmp_path / "accounts/accounts.json").write_bytes(source.read_bytes())
+    scores = [
+        {"id": f"acct_{i:04d}", "probability": probability, "risk_score": score}
+        for i, (probability, score) in enumerate(
+            [(0, 0), (0.39, 39), (0.40, 40), (0.69, 69), (0.695, 70), (1, 100)],
+            start=1,
+        )
+    ]
+    (tmp_path / "scores").mkdir()
+    (tmp_path / "scores/latest.json").write_text(
+        json.dumps(
+            {"model_version": "test", "generated_at": "2026-10-01T00:00:00Z", "scores": scores}
+        )
+    )
+    client = TestClient(app)
+    assert [a["risk_score"] for a in client.get("/accounts?limit=7").json()["accounts"]] == [
+        0, 39, 40, 69, 70, 100, None
+    ]
+    page = client.get("/accounts?high_risk=true&limit=1&offset=1").json()
+    assert (page["total"], page["accounts"][0]["id"], page["accounts"][0]["risk_score"]) == (
+        2, "acct_0006", 100
+    )
+    assert client.get("/accounts?high_risk=false").json()["total"] == 200
+    assert client.get("/accounts?high_risk=true&offset=2").json()["accounts"] == []
+    account = client.get("/accounts/acct_0005").json()
+    assert account["risk_score"] == 70
+    assert "monthly_spend_usd" in account
+    assert client.get("/accounts/missing").status_code == 404
+    assert client.get("/accounts?high_risk=notabool").status_code == 422
+    source_accounts = json.loads(source.read_text())
+    name = source_accounts[4]["name"]
+    industry = source_accounts[4]["industry"]
+    filtered = client.get(
+        "/accounts", params={"high_risk": "true", "q": name, "industry": industry}
+    ).json()
+    assert filtered["total"] >= 1
+    assert all(a["risk_score"] >= 70 and name in a["name"] for a in filtered["accounts"])
+
+
+def test_missing_and_stale_scores(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATA_BUCKET", raising=False)
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path))
+    (tmp_path / "accounts").mkdir()
+    source = Path(__file__).resolve().parents[1] / "data/accounts/accounts.json"
+    (tmp_path / "accounts/accounts.json").write_bytes(source.read_bytes())
+    client = TestClient(app)
+    assert client.get("/accounts/acct_0001").json()["risk_score"] is None
+    assert client.get("/accounts?high_risk=true").json()["total"] == 0
+    (tmp_path / "scores").mkdir()
+    (tmp_path / "scores/latest.json").write_text(
+        json.dumps({"scores": [{"id": "acct_0001", "probability": 0.99}]})
+    )
+    assert client.get("/accounts/acct_0001").json()["risk_score"] is None
+    assert client.get("/accounts?high_risk=true").json()["total"] == 0
+
+
+def test_malformed_scores_are_not_masked(tmp_path, monkeypatch):
+    monkeypatch.delenv("DATA_BUCKET", raising=False)
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path))
+    (tmp_path / "accounts").mkdir()
+    source = Path(__file__).resolve().parents[1] / "data/accounts/accounts.json"
+    (tmp_path / "accounts/accounts.json").write_bytes(source.read_bytes())
+    (tmp_path / "scores").mkdir()
+    (tmp_path / "scores/latest.json").write_text("not json")
+    with pytest.raises(json.JSONDecodeError):
+        TestClient(app).get("/accounts")

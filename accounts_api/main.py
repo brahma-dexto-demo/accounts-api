@@ -5,6 +5,7 @@ from datetime import date
 from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from accounts_api.risk import risk_scores, with_risk
 from accounts_api.storage import JsonStore
 
 app = FastAPI(title="Accounts API", version="0.1.0")
@@ -20,6 +21,7 @@ class Account(BaseModel):
     open_tickets: int = Field(ge=0)
     days_since_last_login: int = Field(ge=0)
     created_at: date
+    risk_score: int | None = Field(ge=0, le=100)
 
 
 class ErrorResponse(BaseModel):
@@ -46,17 +48,21 @@ def healthz() -> dict[str, str]:
 def list_accounts(
     industry: str | None = None,
     q: str | None = None,
+    high_risk: bool = False,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     store: JsonStore = Depends(get_store),
 ):
     accounts = store.read("accounts/accounts.json")
+    scores = risk_scores(store)
     if industry:
         accounts = [a for a in accounts if a["industry"].casefold() == industry.casefold()]
     if q:
         accounts = [a for a in accounts if q.casefold() in a["name"].casefold()]
+    if high_risk:
+        accounts = [a for a in accounts if scores.get(a["id"], -1) >= 70]
     return {
-        "accounts": accounts[offset : offset + limit],
+        "accounts": [with_risk(a, scores) for a in accounts[offset : offset + limit]],
         "total": len(accounts),
         "limit": limit,
         "offset": offset,
@@ -71,5 +77,5 @@ def list_accounts(
 def get_account(id: str, store: JsonStore = Depends(get_store)):
     for account in store.read("accounts/accounts.json"):
         if account["id"] == id:
-            return account
+            return with_risk(account, risk_scores(store))
     raise HTTPException(status_code=404, detail="Account not found")

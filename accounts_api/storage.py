@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 class JsonStore:
@@ -19,6 +20,19 @@ class JsonStore:
         else:
             body = (self.local_dir / key).read_text()
         return json.loads(body)
+
+    def read_optional(self, key: str):
+        """Return None only when an optional object is absent."""
+        try:
+            return self.read(key)
+        except FileNotFoundError:
+            if self.s3:
+                raise
+            return None
+        except ClientError as exc:
+            if self.s3 and exc.response["Error"]["Code"] in {"NoSuchKey", "404"}:
+                return None
+            raise
 
     def write(self, key: str, value):
         body = json.dumps(value, indent=2) + "\n"
