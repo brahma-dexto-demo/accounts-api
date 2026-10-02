@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 class JsonStore:
@@ -15,7 +16,13 @@ class JsonStore:
 
     def read(self, key: str):
         if self.s3:
-            body = self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+            try:
+                body = self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+            except ClientError as exc:
+                # Only a missing object is optional, not permissions/bucket/network failures.
+                if exc.response.get("Error", {}).get("Code") == "NoSuchKey":
+                    raise FileNotFoundError(key) from exc
+                raise
         else:
             body = (self.local_dir / key).read_text()
         return json.loads(body)
