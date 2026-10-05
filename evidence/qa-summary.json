@@ -1,0 +1,28 @@
+{
+  "batch_job": "ee0ea334-0f1e-4938-9296-3d1971fc794e",
+  "batch_status": "SUCCEEDED",
+  "accounts_scored": 200,
+  "high_risk": 49,
+  "auc": 0.9000564652738565,
+  "generated_at": "2026-10-05T12:12:06.532084+00:00",
+  "api_rollout": {
+    "generation": 8,
+    "observedGeneration": 8,
+    "updatedReplicas": 2,
+    "readyReplicas": 2,
+    "availableReplicas": 2,
+    "status": "NewReplicaSetAvailable"
+  },
+  "console_status": "Ready/Green",
+  "staging_browser_checks": [
+    "health 200",
+    "50 default rows / 200 total",
+    "three distinct badge colors",
+    "pagination and detail return",
+    "49 high-risk rows including score 70",
+    "industry/name intersections",
+    "matching detail badge",
+    "filter-preserving back link",
+    "no page errors"
+  ]
+}

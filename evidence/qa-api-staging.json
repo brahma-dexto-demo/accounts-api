@@ -1,0 +1,14 @@
+{
+  "base_url": "http://a943799ded3cf4957a3ff1e314a22c8b-1401960427.us-east-1.elb.amazonaws.com",
+  "passed": true,
+  "accounts_checked": 200,
+  "detail_requests": 200,
+  "high_risk": 49,
+  "checks": [
+    "all scores match staging Batch artifact",
+    "all list/detail responses identical",
+    "high-risk membership and total",
+    "pagination applied after risk filter",
+    "risk industry and name intersect"
+  ]
+}
