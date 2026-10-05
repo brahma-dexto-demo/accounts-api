@@ -116,3 +116,19 @@ The container uses its bundled dataset by default. To substitute local data:
 ```sh
 docker run --rm -p 8000:8000 -e LOCAL_DATA_DIR=/data -v "$PWD/data:/data:ro" accounts-api:local
 ```
+
+## Risk-score rollout requirements
+
+Merge and deploy **risk-engine first, accounts-api second, ops-console last**.
+The engine must publish `scores/latest.json` in the shared data bucket, retaining
+metadata and `probability` while adding integer `risk_score`. Before API rollout,
+verify Pod Identity permits `s3:GetObject` for both `accounts/accounts.json` and
+`scores/latest.json`. Missing scores (`NoSuchKey` only) are valid and produce null;
+AccessDenied, network errors, invalid score rows, and corrupt JSON are errors,
+not readiness success. `/healthz` does not check these data paths.
+
+Run live contract tests against the API URL after rollout. Verify list/detail
+`risk_score` fields and `high_risk=true` with q/industry and pagination. Legacy
+rows remain null and are excluded from high-risk results. Do not substitute zero
+or recompute from probability in the API. Regenerate checked-in `openapi.json`
+with the README command when the response/query schema changes.
