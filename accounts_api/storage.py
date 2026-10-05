@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 import boto3
+from botocore.exceptions import ClientError
 
 
 class JsonStore:
@@ -19,6 +20,19 @@ class JsonStore:
         else:
             body = (self.local_dir / key).read_text()
         return json.loads(body)
+
+    def read_optional_scores(self):
+        """Only a missing local file or S3 NoSuchKey is an absent score artifact."""
+        try:
+            return self.read("scores/latest.json")
+        except FileNotFoundError:
+            if self.s3 is not None:
+                raise
+            return {"scores": []}
+        except ClientError as exc:
+            if self.s3 is None or exc.response["Error"]["Code"] != "NoSuchKey":
+                raise
+            return {"scores": []}
 
     def write(self, key: str, value):
         body = json.dumps(value, indent=2) + "\n"
